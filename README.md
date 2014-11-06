@@ -40,7 +40,7 @@ val sqlContext = new SQLContext(sc)
 
 val schemaRDD = rdd.toSchemaRDD(sqlContext)
 
-schemaRDD1.registerTempTable("my_table")
+schemaRDD.registerTempTable("my_table")
 
 val sqlRdd = sqlContext.sql("SELECT * FROM my_table")
 
