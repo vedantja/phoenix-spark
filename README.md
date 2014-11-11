@@ -14,7 +14,7 @@ Development is done against the following:
 * Apache Spark 1.1.0
 * Hortonworks Data Platform 2.2 Preview 
   * Apache HBase 0.98.4
-  * Apache Phoenix 4.1.0
+  * Apache Phoenix 4.2.1 (You will have to build from source, as it's not officially released yet)
 
 ## Usage
 
@@ -46,10 +46,6 @@ val sqlRdd = sqlContext.sql("SELECT * FROM my_table")
 
 val count = sqlRdd.count()
 ```
-
-## Notes
-
-The enclosed `PhoenixRuntime` class is to workaround [PHOENIX-1405](https://issues.apache.org/jira/browse/PHOENIX-1405) - once that merges, it will be removed.
 
 ## TODO
 

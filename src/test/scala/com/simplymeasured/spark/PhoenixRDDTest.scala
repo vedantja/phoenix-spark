@@ -21,9 +21,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.HBaseTestingUtility
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
-import org.apache.spark.sql.catalyst.types.{StructField, StringType}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.types.{StringType, StructField}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
