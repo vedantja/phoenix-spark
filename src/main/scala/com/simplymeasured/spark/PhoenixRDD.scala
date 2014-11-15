@@ -19,14 +19,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.pig.PhoenixPigConfiguration
 import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType
-import org.apache.phoenix.pig.hadoop.PhoenixInputFormat
-import org.apache.phoenix.pig.hadoop.PhoenixRecord
+import org.apache.phoenix.pig.hadoop.{PhoenixInputFormat, PhoenixRecord}
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Row}
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
@@ -37,9 +36,13 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
                  @transient conf: Configuration)
   extends RDD[PhoenixRecord](sc, Nil) with Logging {
 
-  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
+  val hadoopConf = new SerializableWritable(conf)
 
-  private lazy val phoenixRDD = sc.newAPIHadoopRDD(confBroadcast.value.value,
+  @transient lazy val phoenixConf = {
+    getPhoenixConfiguration
+  }
+
+  val phoenixRDD = sc.newAPIHadoopRDD(phoenixConf.getConfiguration,
     classOf[PhoenixInputFormat],
     classOf[NullWritable],
     classOf[PhoenixRecord])
@@ -53,13 +56,37 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
     phoenixRDD.compute(split, context).map(r => r._2)
   }
 
-  def buildSql: String = {
+  def printPhoenixConfig {
+    val conf = phoenixConf
+
+    for (mapEntry <- conf.getConfiguration.iterator().asScala) {
+      val k = mapEntry.getKey
+      val v = mapEntry.getValue
+
+      if (k.startsWith("phoenix")) {
+        println(s"$k = $v")
+      }
+    }
+  }
+
+  def getPhoenixConfiguration = {
+    // This is just simply not serializable, so don't try.
+    val phoenixConf = new PhoenixPigConfiguration(new Configuration(hadoopConf.value))
+
+    phoenixConf.setSelectStatement(buildSql(table, columns))
+    phoenixConf.setSchemaType(SchemaType.QUERY)
+    phoenixConf.setSelectColumns(columns.mkString(","))
+
+    phoenixConf.configure(host, "\"" + table + "\"", batchSize)
+
+    phoenixConf
+  }
+
+  def buildSql(table: String, columns: Seq[String]): String = {
     "SELECT %s FROM \"%s\"" format(columns.map(f => "\"" + f + "\"").mkString(", "), table)
   }
 
   def toSchemaRDD(sqlContext: SQLContext): SchemaRDD = {
-    val phoenixConf = new PhoenixPigConfiguration(confBroadcast.value.value)
-
     val columnList = phoenixConf.getSelectColumnMetadataList
 
     val structFields = phoenixSchemaToCatalystSchema(columnList.asScala)
@@ -150,12 +177,6 @@ object PhoenixRDD {
   def NewPhoenixRDD(sc: SparkContext, host: String, table: String,
                     columns: Seq[String], batchSize: Long = 100,
                     conf: Configuration) = {
-    conf.set(PhoenixPigConfiguration.SERVER_NAME, host)
-    conf.set(PhoenixPigConfiguration.TABLE_NAME, table)
-    conf.setLong(PhoenixPigConfiguration.UPSERT_BATCH_SIZE, batchSize)
-    conf.set(PhoenixPigConfiguration.SELECT_COLUMNS, columns.mkString(","))
-    conf.set(PhoenixPigConfiguration.SCHEMA_TYPE, SchemaType.QUERY.name())
-
     new PhoenixRDD(sc, host, table, columns, batchSize, conf)
   }
 }

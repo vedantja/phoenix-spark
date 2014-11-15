@@ -56,6 +56,8 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
     val conn = DriverManager.getConnection(s"jdbc:phoenix:$hbaseConnectionString")
 
+    conn.setAutoCommit(true)
+
     // each SQL statement used to set up Phoenix must be on a single line. Yes, that
     // can potentially make large lines.
     val setupSqlSource = getClass.getClassLoader.getResourceAsStream("setup.sql")
@@ -79,13 +81,13 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
   val conf = new SparkConf()
 
-  val sc = new SparkContext("local", "PhoenixSparkTest", conf)
+  val sc = new SparkContext("local[1]", "PhoenixSparkTest", conf)
 
   test("Can create valid SQL") {
     val rdd = PhoenixRDD.NewPhoenixRDD(sc, "localhost", "MyTable", Array("Foo", "Bar"),
       conf = new Configuration())
 
-    assert(rdd.buildSql == "SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
+    rdd.buildSql("MyTable", Array("Foo", "Bar")) should equal("SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
   }
 
   test("Can convert Phoenix schema") {
@@ -107,24 +109,41 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     val sqlContext = new SQLContext(sc)
 
     val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "TABLE1", Array("ID", "COL1"), conf = new Configuration())
+      "TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
 
     val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
 
     schemaRDD1.registerTempTable("sql_table_1")
 
     val rdd2 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "TABLE2", Array("ID", "TABLE1_ID", "col1"),
-      conf = new Configuration())
+      "TABLE2", Array("ID", "TABLE1_ID"),
+      conf = hbaseConfiguration)
 
     val schemaRDD2 = rdd2.toSchemaRDD(sqlContext)
 
     schemaRDD2.registerTempTable("sql_table_2")
 
-    val sqlRdd = sqlContext.sql("SELECT t1.ID AS t1_id, t1.COL1 AS t1_col1, t2.ID AS t2_id, t2.TABLE1_ID, t2.col1 AS t2_col1 FROM sql_table_1 AS t1 INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)")
+    val sqlRdd = sqlContext.sql("SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1 INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)")
 
     val count = sqlRdd.count()
 
     count shouldEqual 6L
+  }
+
+  test("Can create schema RDD and execute query on case sensitive table") {
+    val sqlContext = new SQLContext(sc)
+
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
+      "table3", Array("id", "col1"), conf = hbaseConfiguration)
+
+    val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+    schemaRDD1.registerTempTable("table3")
+
+    val sqlRdd = sqlContext.sql("SELECT * FROM table3")
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 2L
   }
 }

@@ -14,7 +14,7 @@ Development is done against the following:
 * Apache Spark 1.1.0
 * Hortonworks Data Platform 2.2 Preview 
   * Apache HBase 0.98.4
-  * Apache Phoenix 4.2.1 (You will have to build from source, as it's not officially released yet)
+  * Apache Phoenix 4.3.0-SNAPSHOT (Built from the latest git sources)
 
 ## Usage
 
