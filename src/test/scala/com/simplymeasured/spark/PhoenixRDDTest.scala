@@ -19,12 +19,18 @@ import java.sql.DriverManager
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.HBaseTestingUtility
+import org.apache.hadoop.io.NullWritable
+import org.apache.phoenix.pig.PhoenixPigConfiguration
+import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType
+import org.apache.phoenix.pig.hadoop.{PhoenixInputFormat, PhoenixRecord}
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types.{StringType, StructField}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+
+import scala.collection.JavaConverters._
 
 class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   lazy val hbaseTestingUtility = {
@@ -145,5 +151,47 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     val count = sqlRdd.count()
 
     count shouldEqual 2L
+  }
+
+  // Waiting on PHOENIX-1461
+  ignore("Direct query of an array table") {
+    val phoenixConf = new PhoenixPigConfiguration(hbaseConfiguration)
+
+    phoenixConf.setSelectStatement("SELECT * FROM ARRAY_TEST_TABLE")
+    phoenixConf.setSelectColumns("ID,VCARRAY")
+    phoenixConf.setSchemaType(SchemaType.QUERY)
+    phoenixConf.configure(hbaseConnectionString, "ARRAY_TEST_TABLE", 100)
+
+    val columns = phoenixConf.getSelectColumnMetadataList
+
+    for (column <- columns.asScala) {
+      println(column.getPDataType)
+    }
+
+    val phoenixRDD = sc.newAPIHadoopRDD(phoenixConf.getConfiguration,
+      classOf[PhoenixInputFormat],
+      classOf[NullWritable],
+      classOf[PhoenixRecord])
+
+    val count = phoenixRDD.count()
+
+    count shouldEqual 1L
+  }
+
+  ignore("Can query an array table") {
+    val sqlContext = new SQLContext(sc)
+
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
+      "ARRAY_TEST_TABLE", Array("ID", "VCARRAY"), conf = hbaseConfiguration)
+
+    val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+    schemaRDD1.registerTempTable("ARRAY_TEST_TABLE")
+
+    val sqlRdd = sqlContext.sql("SELECT * FROM ARRAY_TEST_TABLE")
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 1L
   }
 }
