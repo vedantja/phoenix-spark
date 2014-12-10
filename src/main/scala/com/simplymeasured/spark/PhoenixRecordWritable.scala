@@ -39,10 +39,7 @@ class PhoenixRecordWritable extends DBWritable with Writable {
     val metadata = resultSet.getMetaData
 
     for(i <- 1 to metadata.getColumnCount) {
-      val label = metadata.getColumnLabel(i)
-      println(s"Column $label")
-
-      resultMap(label) = resultSet.getObject(i)
+      resultMap(metadata.getColumnLabel(i)) = resultSet.getObject(i)
     }
   }
 
