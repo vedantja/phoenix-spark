@@ -23,11 +23,11 @@ Given an existing SparkContext, you can connect to Phoenix and run basic RDD que
 
 ```scala
 val rdd = PhoenixRDD.NewPhoenixRDD(sparkContext, 
-  "sandbox.hortonworks.com:2181:/hbase-unsecure", // Insert your HBase connection string
-  "MyTable",                                      // Your Phoenix table name. This is case-sensitive.   
+  "MyTable",                                      // Your Phoenix table name. This is case-sensitive.
   Array("Foo", "Bar"),                            // Columns to use. Case-sensitive.
-  conf = new Configuration())                     // A Hadoop Configuration object. Phoenix config
-                                                  // will be injected.
+  conf = new Configuration())                     // A Hadoop Configuration object, with all of
+                                                  // the requisite HBase settings present.
+                                                  // Phoenix config will be injected.
 
 // get a count of matched rows
 

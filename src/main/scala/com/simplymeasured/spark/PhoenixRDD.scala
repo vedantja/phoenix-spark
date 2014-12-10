@@ -17,9 +17,8 @@ package com.simplymeasured.spark
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
-import org.apache.phoenix.pig.PhoenixPigConfiguration
-import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType
-import org.apache.phoenix.pig.hadoop.{PhoenixInputFormat, PhoenixRecord}
+import org.apache.phoenix.mapreduce.PhoenixInputFormat
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
@@ -30,22 +29,20 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.{SQLContext, SchemaRDD}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-class PhoenixRDD(sc: SparkContext, host: String, table: String,
-                 columns: Seq[String], batchSize: Long = 100,
+class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
                  @transient conf: Configuration)
-  extends RDD[PhoenixRecord](sc, Nil) with Logging {
-
-  val hadoopConf = new SerializableWritable(conf)
+  extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
 
   @transient lazy val phoenixConf = {
     getPhoenixConfiguration
   }
 
-  val phoenixRDD = sc.newAPIHadoopRDD(phoenixConf.getConfiguration,
-    classOf[PhoenixInputFormat],
+  val phoenixRDD = sc.newAPIHadoopRDD(phoenixConf,
+    classOf[PhoenixInputFormat[PhoenixRecordWritable]],
     classOf[NullWritable],
-    classOf[PhoenixRecord])
+    classOf[PhoenixRecordWritable])
 
   override protected def getPartitions: Array[Partition] = {
     phoenixRDD.partitions
@@ -56,10 +53,8 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
     phoenixRDD.compute(split, context).map(r => r._2)
   }
 
-  def printPhoenixConfig {
-    val conf = phoenixConf
-
-    for (mapEntry <- conf.getConfiguration.iterator().asScala) {
+  def printPhoenixConfig(conf: Configuration): Unit = {
+    for (mapEntry <- conf.iterator().asScala) {
       val k = mapEntry.getKey
       val v = mapEntry.getValue
 
@@ -69,17 +64,17 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
     }
   }
 
-  def getPhoenixConfiguration = {
-    // This is just simply not serializable, so don't try.
-    val phoenixConf = new PhoenixPigConfiguration(new Configuration(hadoopConf.value))
+  def getPhoenixConfiguration: Configuration = {
+    // This is just simply not serializable, so don't try, but clone it because
+    // PhoenixConfigurationUtil mutates it.
+    val config = new Configuration(conf)
 
-    phoenixConf.setSelectStatement(buildSql(table, columns))
-    phoenixConf.setSchemaType(SchemaType.QUERY)
-    phoenixConf.setSelectColumns(columns.mkString(","))
+    PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns))
+    PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
+    PhoenixConfigurationUtil.setInputTableName(config, "\"" + table + "\"")
+    PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
 
-    phoenixConf.configure(host, "\"" + table + "\"", batchSize)
-
-    phoenixConf
+    config
   }
 
   def buildSql(table: String, columns: Seq[String]): String = {
@@ -87,18 +82,23 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
   }
 
   def toSchemaRDD(sqlContext: SQLContext): SchemaRDD = {
-    val columnList = phoenixConf.getSelectColumnMetadataList
+    val columnList = PhoenixConfigurationUtil.getSelectColumnMetadataList(new Configuration(phoenixConf)).asScala
 
-    val structFields = phoenixSchemaToCatalystSchema(columnList.asScala)
+    // The Phoenix ColumnInfo class is not serializable, but a Seq[String] is.
+    val columnNames: Seq[String] = columnList.map(ci => {
+      ci.getDisplayName
+    })
+
+    val structFields = phoenixSchemaToCatalystSchema(columnList)
 
     sqlContext.applySchema(map(pr => {
-      val values = pr.getValues.asScala
+      val values = pr.resultMap
 
-      val r = new GenericMutableRow(values.length)
+      val r = new GenericMutableRow(values.size)
 
       var i = 0
-      while (i < values.length) {
-        r.update(i, values(i))
+      for (columnName <- columnNames) {
+        r.update(i, values(columnName))
 
         i += 1
       }
@@ -174,9 +174,8 @@ class PhoenixRDD(sc: SparkContext, host: String, table: String,
 }
 
 object PhoenixRDD {
-  def NewPhoenixRDD(sc: SparkContext, host: String, table: String,
-                    columns: Seq[String], batchSize: Long = 100,
-                    conf: Configuration) = {
-    new PhoenixRDD(sc, host, table, columns, batchSize, conf)
+  def NewPhoenixRDD(sc: SparkContext, table: String,
+                    columns: Seq[String], conf: Configuration) = {
+    new PhoenixRDD(sc, table, columns, conf)
   }
 }
