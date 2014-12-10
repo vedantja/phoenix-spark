@@ -17,12 +17,8 @@ package com.simplymeasured.spark
 
 import java.sql.DriverManager
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.HBaseTestingUtility
-import org.apache.hadoop.io.NullWritable
-import org.apache.phoenix.pig.PhoenixPigConfiguration
-import org.apache.phoenix.pig.PhoenixPigConfiguration.SchemaType
-import org.apache.phoenix.pig.hadoop.{PhoenixInputFormat, PhoenixRecord}
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark.sql.SQLContext
@@ -30,15 +26,23 @@ import org.apache.spark.sql.catalyst.types.{StringType, StructField}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
-import scala.collection.JavaConverters._
-
 class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   lazy val hbaseTestingUtility = {
     new HBaseTestingUtility()
   }
 
   lazy val hbaseConfiguration = {
-    hbaseTestingUtility.getConfiguration
+    val conf = hbaseTestingUtility.getConfiguration
+
+    val quorum = conf.get("hbase.zookeeper.quorum")
+    val clientPort = conf.get("hbase.zookeeper.property.clientPort")
+    val znodeParent = conf.get("zookeeper.znode.parent")
+
+    // This is an odd one - the Zookeeper Quorum entry in the config is totally wrong. It's
+    // just reporting localhost.
+    conf.set(org.apache.hadoop.hbase.HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:znodeParent")
+
+    conf
   }
 
   lazy val quorumAddress = {
@@ -90,8 +94,8 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   val sc = new SparkContext("local[1]", "PhoenixSparkTest", conf)
 
   test("Can create valid SQL") {
-    val rdd = PhoenixRDD.NewPhoenixRDD(sc, "localhost", "MyTable", Array("Foo", "Bar"),
-      conf = new Configuration())
+    val rdd = PhoenixRDD.NewPhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
+      conf = hbaseConfiguration)
 
     rdd.buildSql("MyTable", Array("Foo", "Bar")) should equal("SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
   }
@@ -101,8 +105,8 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
       new ColumnInfo("varcharColumn", PDataType.VARCHAR.getSqlType)
     )
 
-    val rdd = PhoenixRDD.NewPhoenixRDD(sc, "localhost", "MyTable", Array("Foo", "Bar"),
-      conf = new Configuration())
+    val rdd = PhoenixRDD.NewPhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
+      conf = hbaseConfiguration)
 
     val catalystSchema = rdd.phoenixSchemaToCatalystSchema(phoenixSchema)
 
@@ -114,15 +118,13 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD and execute query") {
     val sqlContext = new SQLContext(sc)
 
-    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
 
     val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
 
     schemaRDD1.registerTempTable("sql_table_1")
 
-    val rdd2 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "TABLE2", Array("ID", "TABLE1_ID"),
+    val rdd2 = PhoenixRDD.NewPhoenixRDD(sc, "TABLE2", Array("ID", "TABLE1_ID"),
       conf = hbaseConfiguration)
 
     val schemaRDD2 = rdd2.toSchemaRDD(sqlContext)
@@ -139,8 +141,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
   test("Can create schema RDD and execute query on case sensitive table") {
     val sqlContext = new SQLContext(sc)
 
-    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "table3", Array("id", "col1"), conf = hbaseConfiguration)
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "table3", Array("id", "col1"), conf = hbaseConfiguration)
 
     val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
 
@@ -153,36 +154,11 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 2L
   }
 
-  // Waiting on PHOENIX-1461
-  ignore("Direct query of an array table") {
-    val phoenixConf = new PhoenixPigConfiguration(hbaseConfiguration)
-
-    phoenixConf.setSelectStatement("SELECT * FROM ARRAY_TEST_TABLE")
-    phoenixConf.setSelectColumns("ID,VCARRAY")
-    phoenixConf.setSchemaType(SchemaType.QUERY)
-    phoenixConf.configure(hbaseConnectionString, "ARRAY_TEST_TABLE", 100)
-
-    val columns = phoenixConf.getSelectColumnMetadataList
-
-    for (column <- columns.asScala) {
-      println(column.getPDataType)
-    }
-
-    val phoenixRDD = sc.newAPIHadoopRDD(phoenixConf.getConfiguration,
-      classOf[PhoenixInputFormat],
-      classOf[NullWritable],
-      classOf[PhoenixRecord])
-
-    val count = phoenixRDD.count()
-
-    count shouldEqual 1L
-  }
-
-  ignore("Can query an array table") {
+  test("Can query an array table") {
     val sqlContext = new SQLContext(sc)
 
-    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, hbaseConnectionString,
-      "ARRAY_TEST_TABLE", Array("ID", "VCARRAY"), conf = hbaseConfiguration)
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "ARRAY_TEST_TABLE", Array("ID", "VCARRAY"),
+      conf = hbaseConfiguration)
 
     val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
 
