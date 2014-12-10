@@ -168,6 +168,11 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
     val count = sqlRdd.count()
 
+    // get row 0, column 1, which should be "VCARRAY"
+    val arrayValues = sqlRdd.collect().apply(0).apply(1)
+
+    arrayValues should equal (Array("String1", "String2", "String3"))
+
     count shouldEqual 1L
   }
 }

@@ -20,6 +20,7 @@ import java.sql.{PreparedStatement, ResultSet}
 
 import org.apache.hadoop.mapreduce.lib.db.DBWritable
 import org.apache.hadoop.io.Writable
+import org.apache.phoenix.schema.PhoenixArray
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -39,7 +40,14 @@ class PhoenixRecordWritable extends DBWritable with Writable {
     val metadata = resultSet.getMetaData
 
     for(i <- 1 to metadata.getColumnCount) {
-      resultMap(metadata.getColumnLabel(i)) = resultSet.getObject(i)
+      val value = resultSet.getObject(i)
+
+      val finalValue = value match {
+        case x: PhoenixArray => value.asInstanceOf[PhoenixArray].getArray
+        case y => value
+      }
+
+      resultMap(metadata.getColumnLabel(i)) = finalValue
     }
   }
 
