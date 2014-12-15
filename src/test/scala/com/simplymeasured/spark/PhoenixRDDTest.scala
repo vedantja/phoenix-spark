@@ -18,7 +18,7 @@ package com.simplymeasured.spark
 import java.sql.DriverManager
 
 import org.apache.hadoop.hbase.HBaseTestingUtility
-import org.apache.phoenix.schema.PDataType
+import org.apache.phoenix.schema.{ColumnNotFoundException, PDataType}
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types.{StringType, StructField}
@@ -39,7 +39,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
     // This is an odd one - the Zookeeper Quorum entry in the config is totally wrong. It's
     // just reporting localhost.
-    conf.set(org.apache.hadoop.hbase.HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:znodeParent")
+    conf.set(org.apache.hadoop.hbase.HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:$znodeParent")
 
     conf
   }
@@ -176,6 +176,61 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     val count = sqlRdd.count()
 
     count shouldEqual 1L
+  }
+
+  test("Using a predicate referring to a non-existent column should fail") {
+    intercept[RuntimeException] {
+      val sqlContext = new SQLContext(sc)
+
+      val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "table3", Array("id", "col1"),
+        predicate = Some("foo = bar"),
+        conf = hbaseConfiguration)
+
+      val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+      schemaRDD1.registerTempTable("table3")
+
+      val sqlRdd = sqlContext.sql("SELECT * FROM table3")
+
+      // we have to execute an action before the predicate failure can occur
+      val count = sqlRdd.count()
+    }.getCause shouldBe a [ColumnNotFoundException]
+  }
+
+  test("Can create schema RDD with predicate that will never match") {
+    val sqlContext = new SQLContext(sc)
+
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "table3", Array("id", "col1"),
+      predicate = Some("\"id\" = -1"),
+      conf = hbaseConfiguration)
+
+    val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+    schemaRDD1.registerTempTable("table3")
+
+    val sqlRdd = sqlContext.sql("SELECT * FROM table3")
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 0L
+  }
+
+  test("Can create schema RDD with complex predicate") {
+    val sqlContext = new SQLContext(sc)
+
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "DATE_PREDICATE_TEST_TABLE", Array("ID", "TIMESERIES_KEY"),
+      predicate = Some("ID > 0 AND TIMESERIES_KEY BETWEEN CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)"),
+      conf = hbaseConfiguration)
+
+    val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+    schemaRDD1.registerTempTable("date_predicate_test_table")
+
+    val sqlRdd = sqlContext.sql("SELECT * FROM date_predicate_test_table")
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 0L
   }
 
   test("Can query an array table") {
