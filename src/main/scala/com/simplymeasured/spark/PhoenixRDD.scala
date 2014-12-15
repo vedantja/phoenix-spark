@@ -32,7 +32,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
-                 @transient conf: Configuration)
+                 predicate: Option[String] = None, @transient conf: Configuration)
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
 
   @transient lazy val phoenixConf = {
@@ -69,7 +69,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     // PhoenixConfigurationUtil mutates it.
     val config = new Configuration(conf)
 
-    PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns))
+    PhoenixConfigurationUtil.setInputQuery(config, buildSql(table, columns, predicate))
     PhoenixConfigurationUtil.setSelectColumnNames(config, columns.mkString(","))
     PhoenixConfigurationUtil.setInputTableName(config, "\"" + table + "\"")
     PhoenixConfigurationUtil.setInputClass(config, classOf[PhoenixRecordWritable])
@@ -77,8 +77,13 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     config
   }
 
-  def buildSql(table: String, columns: Seq[String]): String = {
-    "SELECT %s FROM \"%s\"" format(columns.map(f => "\"" + f + "\"").mkString(", "), table)
+  def buildSql(table: String, columns: Seq[String], predicate: Option[String]): String = {
+    val query = "SELECT %s FROM \"%s\"" format(columns.map(f => "\"" + f + "\"").mkString(", "), table)
+
+    query + (predicate match {
+      case Some(p: String) => " WHERE " + p
+      case _ => ""
+    })
   }
 
   def toSchemaRDD(sqlContext: SQLContext): SchemaRDD = {
@@ -174,8 +179,8 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 }
 
 object PhoenixRDD {
-  def NewPhoenixRDD(sc: SparkContext, table: String,
-                    columns: Seq[String], conf: Configuration) = {
-    new PhoenixRDD(sc, table, columns, conf)
+  def NewPhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
+                    predicate: Option[String] = None, conf: Configuration) = {
+    new PhoenixRDD(sc, table, columns, predicate, conf)
   }
 }

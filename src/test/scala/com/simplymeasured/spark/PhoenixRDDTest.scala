@@ -18,7 +18,6 @@ package com.simplymeasured.spark
 import java.sql.DriverManager
 
 import org.apache.hadoop.hbase.HBaseTestingUtility
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.PDataType
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark.sql.SQLContext
@@ -97,7 +96,8 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     val rdd = PhoenixRDD.NewPhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
       conf = hbaseConfiguration)
 
-    rdd.buildSql("MyTable", Array("Foo", "Bar")) should equal("SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
+    rdd.buildSql("MyTable", Array("Foo", "Bar"), None) should
+      equal("SELECT \"Foo\", \"Bar\" FROM \"MyTable\"")
   }
 
   test("Can convert Phoenix schema") {
@@ -154,6 +154,30 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 2L
   }
 
+  test("Can create schema RDD and execute constrained query") {
+    val sqlContext = new SQLContext(sc)
+
+    val rdd1 = PhoenixRDD.NewPhoenixRDD(sc, "TABLE1", Array("ID", "COL1"), conf = hbaseConfiguration)
+
+    val schemaRDD1 = rdd1.toSchemaRDD(sqlContext)
+
+    schemaRDD1.registerTempTable("sql_table_1")
+
+    val rdd2 = PhoenixRDD.NewPhoenixRDD(sc, "TABLE2", Array("ID", "TABLE1_ID"),
+      predicate = Some("\"ID\" = 1"),
+      conf = hbaseConfiguration)
+
+    val schemaRDD2 = rdd2.toSchemaRDD(sqlContext)
+
+    schemaRDD2.registerTempTable("sql_table_2")
+
+    val sqlRdd = sqlContext.sql("SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1 INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)")
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 1L
+  }
+
   test("Can query an array table") {
     val sqlContext = new SQLContext(sc)
 
@@ -171,7 +195,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
     // get row 0, column 1, which should be "VCARRAY"
     val arrayValues = sqlRdd.collect().apply(0).apply(1)
 
-    arrayValues should equal (Array("String1", "String2", "String3"))
+    arrayValues should equal(Array("String1", "String2", "String3"))
 
     count shouldEqual 1L
   }
