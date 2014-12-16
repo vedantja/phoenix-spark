@@ -45,8 +45,6 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     classOf[PhoenixRecordWritable])
 
   override protected def getPartitions: Array[Partition] = {
-    println(buildSql(table, columns, predicate))
-
     phoenixRDD.partitions
   }
 
