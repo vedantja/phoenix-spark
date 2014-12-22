@@ -12,7 +12,7 @@ This is at the earliest stage of development. It will change frequently.
 Development is done against the following:
 
 * Java 8. It's been reported that you will experience OutOfMemoryErrors during the tests using Java 7.
-* Apache Spark 1.1.0
+* Apache Spark 1.2.0
 * Hortonworks Data Platform 2.2 Preview 
   * Apache HBase 0.98.4
   * Apache Phoenix 4.3.0-SNAPSHOT (Built from the latest git sources)

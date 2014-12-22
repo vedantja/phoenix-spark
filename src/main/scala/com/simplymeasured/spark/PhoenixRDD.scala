@@ -116,11 +116,11 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     columnList.map(ci => {
       val structType = phoenixTypeToCatalystType(ci.getPDataType)
 
-      StructField(ci.getDisplayName, structType, nullable = true)
+      StructField(ci.getDisplayName, structType)
     })
   }
 
-  def phoenixTypeToCatalystType(phoenixType: PDataType) = {
+  def phoenixTypeToCatalystType(phoenixType: PDataType) : DataType = {
     phoenixType match {
       case PDataType.VARCHAR | PDataType.CHAR =>
         StringType
@@ -137,7 +137,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       case PDataType.DOUBLE | PDataType.UNSIGNED_DOUBLE =>
         DoubleType
       case PDataType.DECIMAL =>
-        DecimalType
+        DecimalType(None)
       case PDataType.TIMESTAMP | PDataType.UNSIGNED_TIMESTAMP =>
         TimestampType
       case PDataType.TIME | PDataType.UNSIGNED_TIME =>
@@ -167,7 +167,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       case PDataType.DOUBLE_ARRAY | PDataType.UNSIGNED_DOUBLE_ARRAY =>
         ArrayType(DoubleType, containsNull = true)
       case PDataType.DECIMAL_ARRAY =>
-        ArrayType(DecimalType, containsNull = true)
+        ArrayType(DecimalType(None), containsNull = true)
       case PDataType.TIMESTAMP_ARRAY | PDataType.UNSIGNED_TIMESTAMP_ARRAY =>
         ArrayType(TimestampType, containsNull = true)
       case PDataType.DATE_ARRAY | PDataType.UNSIGNED_DATE_ARRAY =>
