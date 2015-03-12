@@ -20,7 +20,7 @@ import java.sql.{PreparedStatement, ResultSet}
 
 import org.apache.hadoop.mapreduce.lib.db.DBWritable
 import org.apache.hadoop.io.Writable
-import org.apache.phoenix.schema.PhoenixArray
+import org.apache.phoenix.schema.types.PhoenixArray
 
 import scala.collection.immutable
 import scala.collection.mutable

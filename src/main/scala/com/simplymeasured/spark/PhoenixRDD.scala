@@ -19,7 +19,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
-import org.apache.phoenix.schema.PDataType
+import org.apache.phoenix.schema.types._
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -120,59 +120,116 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     })
   }
 
-  def phoenixTypeToCatalystType(phoenixType: PDataType) : DataType = {
-    phoenixType match {
-      case PDataType.VARCHAR | PDataType.CHAR =>
+  // 4.3.0 broke up the PDataType enum, and due to type erasure, it's difficult
+  // to match on them at runtime. There must be a better way, but all I could
+  // come up with is this lookup table to load the class names so we can use
+  // match() on a stable identifier.
+
+  object PDataTypeTable extends Serializable {
+    val VARCHAR = PVarchar.INSTANCE.getJavaClassName
+    val CHAR = PChar.INSTANCE.getJavaClassName
+    val LONG = PLong.INSTANCE.getJavaClassName
+    val UNSIGNED_LONG = PUnsignedLong.INSTANCE.getJavaClassName
+    val INTEGER = PInteger.INSTANCE.getJavaClassName
+    val UNSIGNED_INT = PUnsignedInt.INSTANCE.getJavaClassName
+    val SMALLINT = PSmallint.INSTANCE.getJavaClassName
+    val UNSIGNED_SMALLINT = PUnsignedSmallint.INSTANCE.getJavaClassName
+    val TINYINT = PTinyint.INSTANCE.getJavaClassName
+    val UNSIGNED_TINYINT = PUnsignedTinyint.INSTANCE.getJavaClassName
+    val FLOAT = PFloat.INSTANCE.getJavaClassName
+    val UNSIGNED_FLOAT = PUnsignedFloat.INSTANCE.getJavaClassName
+    val DOUBLE = PDouble.INSTANCE.getJavaClassName
+    val UNSIGNED_DOUBLE = PUnsignedDouble.INSTANCE.getJavaClassName
+    val DECIMAL = PDecimal.INSTANCE.getJavaClassName
+    val TIMESTAMP = PTimestamp.INSTANCE.getJavaClassName
+    val UNSIGNED_TIMESTAMP = PUnsignedTimestamp.INSTANCE.getJavaClassName
+    val TIME = PTime.INSTANCE.getJavaClassName
+    val UNSIGNED_TIME = PUnsignedTime.INSTANCE.getJavaClassName
+    val DATE = PDate.INSTANCE.getJavaClassName
+    val UNSIGNED_DATE = PUnsignedDate.INSTANCE.getJavaClassName
+    val BOOLEAN = PBoolean.INSTANCE.getJavaClassName
+    val VARBINARY = PVarbinary.INSTANCE.getJavaClassName
+    val BINARY = PBinary.INSTANCE.getJavaClassName()
+    val INTEGER_ARRAY = PIntegerArray.INSTANCE.getJavaClassName
+    val UNSIGNED_INT_ARRAY = PUnsignedIntArray.INSTANCE.getJavaClassName
+    val BOOLEAN_ARRAY = PBooleanArray.INSTANCE.getJavaClassName
+    val VARCHAR_ARRAY = PVarcharArray.INSTANCE.getJavaClassName
+    val CHAR_ARRAY = PCharArray.INSTANCE.getJavaClassName
+    val VARBINARY_ARRAY = PVarbinaryArray.INSTANCE.getJavaClassName
+    val BINARY_ARRAY = PBinaryArray.INSTANCE.getJavaClassName
+    val LONG_ARRAY = PLongArray.INSTANCE.getJavaClassName
+    val UNSIGNED_LONG_ARRAY = PUnsignedLongArray.INSTANCE.getJavaClassName
+    val SMALLINT_ARRAY = PSmallintArray.INSTANCE.getJavaClassName
+    val UNSIGNED_SMALLINT_ARRAY = PUnsignedSmallintArray.INSTANCE.getJavaClassName
+    val TINYINT_ARRAY = PTinyintArray.INSTANCE.getJavaClassName
+    val UNSIGNED_TINYINT_ARRAY = PUnsignedTinyintArray.INSTANCE.getJavaClassName
+    val FLOAT_ARRAY = PFloatArray.INSTANCE.getJavaClassName
+    val UNSIGNED_FLOAT_ARRAY = PUnsignedFloatArray.INSTANCE.getJavaClassName
+    val DOUBLE_ARRAY = PDoubleArray.INSTANCE.getJavaClassName
+    val UNSIGNED_DOUBLE_ARRAY = PUnsignedDoubleArray.INSTANCE.getJavaClassName
+    val DECIMAL_ARRAY = PDecimalArray.INSTANCE.getJavaClassName
+    val TIMESTAMP_ARRAY = PTimestampArray.INSTANCE.getJavaClassName
+    val UNSIGNED_TIMESTAMP_ARRAY = PUnsignedTimestampArray.INSTANCE.getJavaClassName
+    val DATE_ARRAY = PDateArray.INSTANCE.getJavaClassName
+    val UNSIGNED_DATE_ARRAY = PUnsignedDateArray.INSTANCE.getJavaClassName
+    val TIME_ARRAY = PTimeArray.INSTANCE.getJavaClassName
+    val UNSIGNED_TIME_ARRAY = PUnsignedTimeArray.INSTANCE.getJavaClassName
+  }
+
+  def phoenixTypeToCatalystType(phoenixType: PDataType[_]) : DataType = {
+
+    phoenixType.getJavaClassName match {
+      case PDataTypeTable.VARCHAR | PDataTypeTable.CHAR =>
         StringType
-      case PDataType.LONG | PDataType.UNSIGNED_LONG =>
+      case PDataTypeTable.LONG | PDataTypeTable.UNSIGNED_LONG =>
         LongType
-      case PDataType.INTEGER | PDataType.UNSIGNED_INT =>
+      case PDataTypeTable.INTEGER | PDataTypeTable.UNSIGNED_INT =>
         IntegerType
-      case PDataType.SMALLINT | PDataType.UNSIGNED_SMALLINT =>
+      case PDataTypeTable.SMALLINT | PDataTypeTable.UNSIGNED_SMALLINT =>
         ShortType
-      case PDataType.TINYINT | PDataType.UNSIGNED_TINYINT =>
+      case PDataTypeTable.TINYINT | PDataTypeTable.UNSIGNED_TINYINT =>
         ByteType
-      case PDataType.FLOAT | PDataType.UNSIGNED_FLOAT =>
+      case PDataTypeTable.FLOAT | PDataTypeTable.UNSIGNED_FLOAT =>
         FloatType
-      case PDataType.DOUBLE | PDataType.UNSIGNED_DOUBLE =>
+      case PDataTypeTable.DOUBLE | PDataTypeTable.UNSIGNED_DOUBLE =>
         DoubleType
-      case PDataType.DECIMAL =>
+      case PDataTypeTable.DECIMAL =>
         DecimalType(None)
-      case PDataType.TIMESTAMP | PDataType.UNSIGNED_TIMESTAMP =>
+      case PDataTypeTable.TIMESTAMP | PDataTypeTable.UNSIGNED_TIMESTAMP =>
         TimestampType
-      case PDataType.TIME | PDataType.UNSIGNED_TIME =>
+      case PDataTypeTable.TIME | PDataTypeTable.UNSIGNED_TIME =>
         TimestampType
-      case PDataType.DATE | PDataType.UNSIGNED_DATE =>
+      case PDataTypeTable.DATE | PDataTypeTable.UNSIGNED_DATE =>
         TimestampType
-      case PDataType.BOOLEAN =>
+      case PDataTypeTable.BOOLEAN =>
         BooleanType
-      case PDataType.VARBINARY | PDataType.BINARY =>
+      case PDataTypeTable.VARBINARY | PDataTypeTable.BINARY =>
         BinaryType
-      case PDataType.INTEGER_ARRAY | PDataType.UNSIGNED_INT_ARRAY =>
+      case PDataTypeTable.INTEGER_ARRAY | PDataTypeTable.UNSIGNED_INT_ARRAY =>
         ArrayType(IntegerType, containsNull = true)
-      case PDataType.BOOLEAN_ARRAY =>
+      case PDataTypeTable.BOOLEAN_ARRAY =>
         ArrayType(BooleanType, containsNull = true)
-      case PDataType.VARCHAR_ARRAY | PDataType.CHAR_ARRAY =>
+      case PDataTypeTable.VARCHAR_ARRAY | PDataTypeTable.CHAR_ARRAY =>
         ArrayType(StringType, containsNull = true)
-      case PDataType.VARBINARY_ARRAY | PDataType.BINARY_ARRAY =>
+      case PDataTypeTable.VARBINARY_ARRAY | PDataTypeTable.BINARY_ARRAY =>
         ArrayType(BinaryType, containsNull = true)
-      case PDataType.LONG_ARRAY | PDataType.UNSIGNED_LONG_ARRAY =>
+      case PDataTypeTable.LONG_ARRAY | PDataTypeTable.UNSIGNED_LONG_ARRAY =>
         ArrayType(LongType, containsNull = true)
-      case PDataType.SMALLINT_ARRAY | PDataType.UNSIGNED_SMALLINT_ARRAY =>
+      case PDataTypeTable.SMALLINT_ARRAY | PDataTypeTable.UNSIGNED_SMALLINT_ARRAY =>
         ArrayType(IntegerType, containsNull = true)
-      case PDataType.TINYINT_ARRAY | PDataType.UNSIGNED_TINYINT_ARRAY =>
+      case PDataTypeTable.TINYINT_ARRAY | PDataTypeTable.UNSIGNED_TINYINT_ARRAY =>
         ArrayType(ByteType, containsNull = true)
-      case PDataType.FLOAT_ARRAY | PDataType.UNSIGNED_FLOAT_ARRAY =>
+      case PDataTypeTable.FLOAT_ARRAY | PDataTypeTable.UNSIGNED_FLOAT_ARRAY =>
         ArrayType(FloatType, containsNull = true)
-      case PDataType.DOUBLE_ARRAY | PDataType.UNSIGNED_DOUBLE_ARRAY =>
+      case PDataTypeTable.DOUBLE_ARRAY | PDataTypeTable.UNSIGNED_DOUBLE_ARRAY =>
         ArrayType(DoubleType, containsNull = true)
-      case PDataType.DECIMAL_ARRAY =>
+      case PDataTypeTable.DECIMAL_ARRAY =>
         ArrayType(DecimalType(None), containsNull = true)
-      case PDataType.TIMESTAMP_ARRAY | PDataType.UNSIGNED_TIMESTAMP_ARRAY =>
+      case PDataTypeTable.TIMESTAMP_ARRAY | PDataTypeTable.UNSIGNED_TIMESTAMP_ARRAY =>
         ArrayType(TimestampType, containsNull = true)
-      case PDataType.DATE_ARRAY | PDataType.UNSIGNED_DATE_ARRAY =>
+      case PDataTypeTable.DATE_ARRAY | PDataTypeTable.UNSIGNED_DATE_ARRAY =>
         ArrayType(TimestampType, containsNull = true)
-      case PDataType.TIME_ARRAY | PDataType.UNSIGNED_TIME_ARRAY =>
+      case PDataTypeTable.TIME_ARRAY | PDataTypeTable.UNSIGNED_TIME_ARRAY =>
         ArrayType(TimestampType, containsNull = true)
     }
   }

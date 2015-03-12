@@ -18,7 +18,8 @@ package com.simplymeasured.spark
 import java.sql.DriverManager
 
 import org.apache.hadoop.hbase.HBaseTestingUtility
-import org.apache.phoenix.schema.{ColumnNotFoundException, PDataType}
+import org.apache.phoenix.schema.types.PVarchar
+import org.apache.phoenix.schema.{ColumnNotFoundException}
 import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types.{StringType, StructField}
@@ -102,7 +103,7 @@ class PhoenixRDDTest extends FunSuite with Matchers with BeforeAndAfterAll {
 
   test("Can convert Phoenix schema") {
     val phoenixSchema = List(
-      new ColumnInfo("varcharColumn", PDataType.VARCHAR.getSqlType)
+      new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
     )
 
     val rdd = PhoenixRDD.NewPhoenixRDD(sc, "MyTable", Array("Foo", "Bar"),
